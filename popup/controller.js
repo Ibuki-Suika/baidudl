@@ -4,21 +4,27 @@ app.controller('control', ['$scope', function($scope){
 	$scope.message = 'pan.baidu.com only';
 	$scope.status = false;
 	$scope.page = 1;
-	
-	// function to generate high speed link
+	$scope.vcodes = [];
+	$scope.vcode_input = "";
+
+	// function to generate high speed links
 	$scope.generate = function(i){
 		console.log(i);
 		$scope.message = "Running...";
 		var x = $scope.links[i];
 		var fs_id = x.fs_id;
+		var isdir = x.isdir;
 		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-			chrome.tabs.sendMessage(tabs[0].id, {fs_id: fs_id, index: i});
+			chrome.tabs.sendMessage(tabs[0].id, {fs_id: fs_id, index: i, isdir: isdir});
 		});
 	}
 	$scope.generateAll = function(){
-		for(var i=0; i<$scope.links.length; i++)$scope.generate(i);
+		for(var i=0; i<$scope.links.length; i++){
+			if(!$scope.links[i].hlink)$scope.generate(i);
+		}
 	}
 	
+	// pages
 	$scope.prev = function(){
 		if($scope.page == 1){
 			$scope.message = "Already the first page";
@@ -35,6 +41,8 @@ app.controller('control', ['$scope', function($scope){
 		$scope.page += 1;
 		$scope.run();
 	}
+
+	// run
 	$scope.run = function(){
 		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 			var url = tabs[0].url;
@@ -86,37 +94,57 @@ app.controller('control', ['$scope', function($scope){
 		if(document.execCommand("copy"))$scope.message = "Copy all success";
 		else $scope.message = "Copy failure"
 	}
-
+	$scope.verify = function(vcode_str, vcode_input, index){
+		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+			chrome.tabs.sendMessage(tabs[0].id, {vcode: {vcode_str: vcode_str, vcode_input: vcode_input}, index: index});
+			$scope.$apply(function(){
+				var vcodes = $scope.vcodes.filter(function(e){
+					return e.vcode_str != vcode_str;
+				})
+				$scope.vcodes = vcodes;
+			});
+		});
+	}
 }])
 
-// add listener to handle received download links
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse){
+// add listener to handle received message
+chrome.runtime.onMessage.addListener(function(req, sender, sendResponse){
 	var $scope = angular.element(document.getElementById('app')).scope();
-	if(request.type == "passLinks"){
+	if(req.type == "dlink"){
 		$scope.$apply(function(){
-			if(request.result.feedback != 'Success'){
-				$scope.message = 'It\'s empty!';
-			}else{
-				$scope.links = request.result.links;
-				$scope.status = true;
-			}
+			$scope.links = req.result;
+			$scope.status = true;
 		});
+		chrome.tabs.query({active: true, currentWindow: true}, function(tabs){
+			chrome.storage.local.set({'data': {url: tabs[0].url, timestamp: Number(new Date()), links: $scope.links, page: $scope.page}})
+		})
 		sendResponse('Success');
 	}
-	if(request.type == "passNewLink"){
-		var hlink = request.result.link;
-		var index = request.result.index;
+	if(req.type == "hlink2"){
+		var hlink = req.result.link;
+		var index = req.result.index;
 		$scope.$apply(function(){
 			$scope.links[index].hlink = hlink;
 			$scope.message = "Ready."
 		})
+		chrome.tabs.query({active: true, currentWindow: true}, function(tabs){
+			chrome.storage.local.set({'data': {url: tabs[0].url, timestamp: Number(new Date()), links: $scope.links, page: $scope.page}})
+		})
 	}
-	if(request.type == "error"){
+	if(req.type == "error"){
 		$scope.$apply(function(){
-			$scope.message = request.result;
+			$scope.message = req.result;
+		})
+	}
+
+	if(req.type == "vcode"){
+		$scope.$apply(function(){
+			$scope.vcodes.push({vcode_str: req.result.vcode, index: req.result.index})
+			$scope.message = "vcode required...";
 		})
 	}
 })
+
 // execute content script
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 	var url = tabs[0].url;
@@ -128,11 +156,11 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 			$scope.$apply(function(){$scope.message = "Ready."});
 			chrome.tabs.sendMessage(tabs[0].id, {greeting: "yes"}, function(response) {
 				if(!response){
-					chrome.tabs.executeScript({file: "content_script/sandbox.js"});
-				}else{
-					chrome.tabs.sendMessage(tabs[0].id, {page: $scope.page}, function(res){
-						console.log(res);
+					chrome.tabs.executeScript({file: "content_script/sandbox.js"}, function(){
+						check_storage(tabs, url, 1);
 					})
+				}else{
+					check_storage(tabs, url, $scope.page);
 				}
 			})
 		}
@@ -140,3 +168,31 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 		console.log(err);
 	}
 });
+
+function check_storage(tabs, url, page){
+	chrome.storage.local.get('data', function(result){
+		var flag = 0;
+		var data;
+		if('data' in result){
+			data = result.data;
+		}
+		else{
+			flag = 1;
+			data = {}
+		}
+		if(!data)flag=1;
+		if('url' in data && url != data.url)flag = 1;
+		if('timestamp' in data && Number(new Date()) - data.timestamp > 5*60*1000)flag = 1;
+		if('page' in data && page != data.page)flag = 1;
+		if(flag == 1)chrome.tabs.sendMessage(tabs[0].id, {page: page});
+		else{
+			var $scope = angular.element(document.getElementById('app')).scope();
+			setTimeout(function(){
+				$scope.$apply(function(){
+					$scope.status = true;
+					$scope.links = data.links;
+				})
+			}, 300)
+		}
+	});
+}
