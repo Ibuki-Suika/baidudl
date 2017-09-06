@@ -4,12 +4,13 @@
 	"name": "baidudl",
 	"short_name": "baidudl",
 	"description": "Extract high speed download links from pan.baidu.com. Github: https://github.com/Kyle-Kyle/baidudl",
-	"version": "1.0.7",
+	"version": "1.3.6",
 
 	"web_accessible_resources": [
 		"content_script/injection_listener.js",
 		"content_script/injection.js",
-		"content_script/utilities.js"
+		"content_script/utilities.js",
+		"resource/jquery.cookie.js"
 	],
 
 	"icons": {
@@ -32,6 +33,13 @@
 
 	"permissions": [
 		"activeTab",
-		"storage"
+		"storage",
+		"http://127.0.0.1:8333/",
+		"https://pan.baidu.com/",
+		"cookies",
+		"https://d.pcs.baidu.com/",
+		"http://d.pcs.baidu.com/",
+		"webRequest",
+		"webRequestBlocking"
 	]
 }

@@ -3,7 +3,9 @@
 		<title>baidudl</title>
 
 		<script src="/resource/angular.min.js"></script>
+		<script src="/popup/chrome_api.js"></script>
 		<script src="/popup/controller.js"></script>
+		<script src="/popup/aria2_rpc.js"></script>
 	</head>
 
 	<body>
@@ -11,8 +13,8 @@
 			<table ng-hide='!status'>
 				<tr>
 					<td>File name</td>
-					<td>Dlinks</td>
-					<td><button ng-click="copyAll('dlink')">CopyAll</button></td>
+					<td>Glinks</td>
+					<td><button ng-click="copyAll('glink')">CopyAll</button></td>
 					<td>Hlinks</td>
 					<td><button ng-click="generateAll()">GenerateAll</button></td>
 					<td><button ng-click="copyAll('hlink')">CopyAll</button></td>
@@ -20,11 +22,12 @@
 				</tr>
 				<tr ng-repeat="x in links">
 					<td><input style="width: 300px" type='text' value={{x.path}} ng-disabled='true'></td>
-					<td><input style="width: 50px"type='text' value={{x.dlink}} ng-disabled='true'></td>
-					<td><button ng-click="copy($index, 'dlink')">Copy</button></td>
+					<td><input style="width: 50px"type='text' value={{x.glink}} ng-disabled='true'></td>
+					<td><button ng-click="copy($index, 'glink')">Copy</button></td>
 					<td><input style="width: 50px"type='text' value={{x.hlink}} ng-disabled='true'></td>
 					<td><button ng-click="generate($index)">Generate</button></td>
 					<td><button ng-click="copy($index, 'hlink')">Copy</button></td>
+					<td><button ng-click="download($index)" ng-hide='x.isdir'>RPCDownload</td>
 				</tr>
 			</table>
 			<div ng-hide='!status'><button ng-click="prev()">&lt;</button>{{page}}<button ng-click="next()">&gt;</button></div>
@@ -33,8 +36,8 @@
 				<tr ng-repeat="x in vcodes">
 					<td><img ng-src='https://pan.baidu.com/genimage?{{x.vcode_str}}'></td>
 					<td><input type='text' ng-model='vcode_input'></td>
-					<td><button ng-click="verify(x.vcode_str, vcode_input, x.index)">verify</button></td>
-					<td><button ng-click="verify(x.vcode_str, vcode_input, x.index)">refresh</button></td>
+					<td><button ng-click="verify($index, vcode_input)">verify</button></td>
+					<td><button ng-click="verify($index, vcode_input)">refresh</button></td>
 				</tr>
 			</table>
 		</div>

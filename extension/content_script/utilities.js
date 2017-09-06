@@ -30,17 +30,18 @@ function b64(t) {
 };
 
 // basic function to get hlink
-function get_hlink(yunData, extra, vcode, index, type, dir, fidlist, cb){
+function get_hlink(yunData, extra, vcode, indices, type, dir, fidlist, cb){
 	/*
 	 * 	Parameters:
 	 * 		yunData:	which yunData to use
 	 * 		extra:		whether extra encryption needed
 	 * 		vcode:		verification code information
-	 * 		index:		what the index of this file in popup is
+	 * 		indices:	what the indices of these files in popup are
 	 * 		type:		which type of information to use
 	 * 		dir:		whether this file is a directory
 	 * 		fidlist:	whose hlink you want to get
 	 * */
+
 	if(type == 1){
 		var url = "/api/sharedownload?sign="+yunData.sign+"&timestamp="+yunData.timestamp;
 		var data = "encrypt=0&product=share&uk="+yunData.uk+"&primaryid="+yunData.shareid;
@@ -56,6 +57,10 @@ function get_hlink(yunData, extra, vcode, index, type, dir, fidlist, cb){
 		sign = encodeURIComponent(sign);
 		var url = "/api/download?sign="+sign+"&timestamp="+yunData.timestamp+"&fidlist="+JSON.stringify(fidlist)+"&bdstoken="+yunData.MYBDSTOKEN+"&type=batch";
 		var data = "encrypt=0&product=share&type=batch"
+	}
+	else if(type == 4){
+		var url = "/api/sharedownload?sign="+yunData.SIGN+"&timestamp="+yunData.TIMESTAMP;
+		var data = "encrypt=0&product=share&uk="+yunData.SHARE_UK+"&primaryid="+yunData.SHARE_ID+'&type=batch';
 	}
 	else return;
 
@@ -92,11 +97,13 @@ function get_hlink(yunData, extra, vcode, index, type, dir, fidlist, cb){
 						}
 
 						// now we have got verification image, send it to popup
-						var event = new CustomEvent("vcode", {detail: {vcode: result.vcode, index: index}});
+						var event = new CustomEvent("vcode", {detail: {vcode: result.vcode, indices: indices}});
 						window.dispatchEvent(event);
 						return;
 					})
 				}
+
+				if(res.errno == 118) err_msg = "Error: no download permission"
 
 				// other errors
 				var event = new CustomEvent("error", {detail: err_msg});
@@ -104,8 +111,18 @@ function get_hlink(yunData, extra, vcode, index, type, dir, fidlist, cb){
 				return;
 			}
 			// now we have got hlink
-			if(dir)cb(res.dlink, index);
-			else cb(res.list[0].dlink, index);
+			if(dir)cb([res.dlink], [indices]);
+			else{
+				var d = {};
+				res.list.forEach(function(e){
+					d[e.fs_id] = e.dlink;
+				})
+				var links = [];
+				for(var i=0; i<fidlist.length; i++){
+					links.push(d[fidlist[i]]);
+				}
+				cb(links, indices);
+			}
 		}
 	});
 }
@@ -123,6 +140,7 @@ function get_dlink(sign, fidlist, cb){
 		success: function(d){
 			var err_msg = "Error: can't get dlinks";
 			if(d.errno != 0){
+				console.log(d);
 				var event = new CustomEvent("error", {detail: err_msg});
 				window.dispatchEvent(event);
 				return;
@@ -155,6 +173,7 @@ function share(fs_id, cb){
 			if(d.errno != 0){
 				console.log(d);
 				var err_msg = "Error: cant't share this file";
+				if(d.errno == -3)err_msg = "Error: this is not your file, you can't share it"
 				if(d.errno == 110)err_msg = "Error: this file has been shared too frequently"
 				var event = new CustomEvent("error", {detail: err_msg});
 				window.dispatchEvent(event);
@@ -257,3 +276,99 @@ function list_dir(type, page, cb){
 	})
 }
 
+// list search result
+function list_search(cb){
+	// get keyword
+	var key = getURLParameter('key');
+
+	// get sign parameter
+	u = new Function("return " + yunData.sign2)()
+	sign = b64(u(yunData.sign5, yunData.sign1));
+	sign = encodeURIComponent(sign);
+
+	// list search result
+	$.ajax({
+		type: 'GET',
+		url: 'https://pan.baidu.com/api/search?recursion=1&order=time&desc=1&showempty=0&page=1&num=100&key='+key,
+		dataType: 'json',
+		success: function(res){
+			// in case of failure
+			if(res.errno != 0){
+				console.log(res);
+				err_msg = "Warning: can't get search result";
+				event = new CustomEvent("error", {detail: err_msg});
+				window.dispatchEvent(event);
+				return;
+			}
+			cb(res.list);
+		}
+	})
+}
+
+// get links by file list in home page
+function get_home_links(list){
+	var dict = {};
+	list.forEach(function(e){
+		var len = e.path.split('/').length;
+		dict[e.fs_id] = e.path.split('/')[len-1];
+	})
+
+	// get fid list
+	var fidlist = list.map(function(d){return d.fs_id});
+
+	// get dlink by fid list
+	get_dlink(sign, fidlist, function(links){
+		result = [];
+
+		// process non-directory files
+		for(var i=0; i<links.length; i++){
+			result.push({dlink: links[i].dlink, hlink: "", fs_id: links[i].fs_id, path: dict[links[i].fs_id], isdir: 0});
+			var index = fidlist.indexOf(links[i].fs_id);
+			fidlist.splice(index, 1);
+		}
+
+		// process directory
+		for(var i=0; i<fidlist.length; i++){
+			result.push({dlink: "NA", hlink: "", fs_id: fidlist[i], path: dict[fidlist[i]], isdir: 1});
+
+			// get directory dlink
+			get_hlink(yunData, 0, undefined, [i+links.length], 3, 1, [fidlist[i]], function(links, indices){
+				var event =  new CustomEvent("hlink2", {detail: {links: links, indices: indices}});
+				window.dispatchEvent(event);
+			});
+		}
+
+		// dispatch result
+		var event =  new CustomEvent("dlink", {detail: result});
+		window.dispatchEvent(event);
+	});
+}
+
+// get links by file list in share page
+function get_share_links(list){
+	// dispatch general information
+	var links = list.map(function(e){return {fs_id: e.fs_id, dlink: "NA", hlink: "", path: e.path, isdir: e.isdir}});
+	var event = new CustomEvent("dlink", {detail: links});
+	window.dispatchEvent(event);
+
+	// get hlink for each file and dispatch it
+	var file_fs_id_list = [];
+	var file_indices = [];
+	for(var i=0; i<links.length; i++){
+		if(!links[i].isdir){
+			file_fs_id_list.push(links[i].fs_id);
+			file_indices.push(i);
+		}else{
+			get_hlink(yunData, 1, undefined, [i], 4, 1, [links[i].fs_id], function(links, indices){
+				var event = new CustomEvent("hlink2", {detail: {links: links, indices: indices}});
+				window.dispatchEvent(event);
+			})
+		}
+	}
+	if(file_fs_id_list.length != 0){
+		get_hlink(yunData, 1, undefined, file_indices, 2, 0, file_fs_id_list, function(links, indices){
+			var event = new CustomEvent("hlink2", {detail: {links: links, indices: indices}});
+			window.dispatchEvent(event);
+		})
+	}
+}
