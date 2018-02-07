@@ -1,10 +1,10 @@
 {
 	"manifest_version": 2,
 
-	"name": "baidudl",
-	"short_name": "baidudl",
+	"name": "baidu-dl",
+	"short_name": "baidu-dl",
 	"description": "Extract high speed download links from pan.baidu.com. Github: https://github.com/Kyle-Kyle/baidudl",
-	"version": "1.3.6",
+	"version": "1.4.2",
 
 	"web_accessible_resources": [
 		"content_script/injection_listener.js",
@@ -25,6 +25,10 @@
 		"default_title"	: "Click here!"
 	},
 
+	"options_ui": {
+		"page": "options.html"
+	},
+
 	"content_scripts": [{
 		"matches": ["https://pan.baidu.com/*", "http://pan.baidu.com/*"],
 		"js": ["resource/jquery.min.js"],
@@ -34,9 +38,10 @@
 	"permissions": [
 		"activeTab",
 		"storage",
-		"http://127.0.0.1:8333/",
-		"https://pan.baidu.com/",
 		"cookies",
+		"http://*/jsonrpc",
+		"https://*/jsonrpc",
+		"https://pan.baidu.com/",
 		"https://d.pcs.baidu.com/",
 		"http://d.pcs.baidu.com/",
 		"webRequest",
